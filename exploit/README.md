@@ -1,0 +1,30 @@
+# PS4 4.05 Kernel Exploit
+---
+## Summary
+In this project you will find a full implementation of the "namedobj" kernel exploit for the PlayStation 4 on 4.05. It will allow you to run arbitrary code as kernel, to allow jailbreaking and kernel-level modifications to the system. This release contain game Dumper for PS4 payload code by Vortex
+
+You can find fail0verflow's original write-up on the bug [here](https://fail0verflow.com/blog/2017/ps4-namedobj-exploit/), you can find my technical write-up which dives more into implementation specifics [here](https://github.com/Cryptogenic/Exploit-Writeups/blob/master/PS4/%22NamedObj%22%204.05%20Kernel%20Exploit%20Writeup.md).
+
+## Patches Included
+The following patches are made by default in the kernel ROP chain:
+1) Disable kernel write protection
+2) Allow RWX (read-write-execute) memory mapping
+3) Dynamic Resolving (`sys_dynlib_dlsym`) allowed from any process
+4) Custom system call #11 (`kexec()`) to execute arbitrary code in kernel mode
+5) Allow unprivileged users to call `setuid(0)` successfully. Works as a status check, doubles as a privilege escalation.
+6) Game dumper for PS4 payload code by Vortex
+
+## Notes
+- This exploit is actually incredibly stable at around 95% in my tests. WebKit very rarely crashes and the same is true with kernel.
+- I've built in a patch so the kernel exploit will only run once on the system. You can still make additional patches via payloads.
+- A custom syscall is added (#11) to execute any RWX memory in kernel mode, this can be used to execute payloads that want to do fun things like jailbreaking and patching the kernel.
+- An SDK is not provided in this release, however a barebones one to get started with may be released at a later date.
+
+## Contributors
+I was not alone in this exploit's development, and would like to thank those who helped me along the way below.
+
+- [qwertyoruiopz](https://twitter.com/qwertyoruiopz)
+- [Flatz](https://twitter.com/flat_z)
+- [CTurt](https://twitter.com/CTurtE)
+- [IDC](https://twitter.com/3226_2143)
+- Anonymous
