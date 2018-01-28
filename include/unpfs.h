@@ -27,10 +27,12 @@ struct di_d32
   uint16_t nlink;
   uint32_t flags;
   uint64_t size;
-  char unk1[56];
+  uint64_t size_compressed;
+  uint64_t unix_time[4];
+  uint32_t time_nsec[4];
   uint32_t uid;
   uint32_t gid;
-  uint64_t unk2[2];
+  uint64_t spare[2];
   uint32_t blocks;
   uint32_t db[12];
   uint32_t ib[5];

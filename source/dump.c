@@ -43,7 +43,7 @@ int is_self(const char *fn)
         stat(fn, &st);
         void *addr = mmap(0, 0x4000, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
         if (addr != MAP_FAILED) {
-            printfsocket("mmap %s : %p\n", selfFile, addr);
+            printfsocket("mmap %s : %p\n", fn, addr);
             if (st.st_size >= 4)
             {
                 uint32_t selfMagic = *(uint32_t*)((uint8_t*)addr + 0x00);
@@ -61,12 +61,12 @@ int is_self(const char *fn)
             munmap(addr, 0x4000);
         }
         else {
-            printfsocket("mmap file %s err : %s\n", selfFile, strerror(errno));
+            printfsocket("mmap file %s err : %s\n", fn, strerror(errno));
         }
         close(fd);
     }
     else {
-        printfsocket("open %s err : %s\n", selfFile, strerror(errno));
+        printfsocket("open %s err : %s\n", fn, strerror(errno));
     }
 
     return res;
@@ -241,7 +241,7 @@ static void copy_decrypt_dir(char *sourcedir, char* destdir, int dec)
     DIR *dir;
     struct dirent *dp;
     struct stat info;
-    char src_path[PATH_MAX], dst_path[PATH_MAX];
+    char src_path[1024], dst_path[1024];
 
     dir = opendir(sourcedir);
     if (!dir)
