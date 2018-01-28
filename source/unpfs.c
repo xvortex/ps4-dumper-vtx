@@ -8,7 +8,6 @@
 #include "unpfs.h"
 
 int pfs;
-size_t pfs_size;
 struct pfs_header_t *header;
 struct di_d32 *inodes;
 
@@ -16,7 +15,6 @@ struct di_d32 *inodes;
 
 void memcpy_to_file(const char *fname, uint64_t ptr, uint64_t size)
 {
-  if ((ptr + size) > pfs_size) return;
   lseek(pfs, ptr, SEEK_SET);
   size_t bytes;
   char *buffer = malloc(BUFFER_SIZE);
@@ -41,15 +39,31 @@ void memcpy_to_file(const char *fname, uint64_t ptr, uint64_t size)
 static void parse_directory(int ino, int lev, struct di_d32 *parent, char *parent_name)
 {
   uint32_t z;
-	
-  for (z = 0; z < 12; z++) 
-  {
-    if (inodes[ino].db[z] <= 0) { continue; }
-		
-    printfsocket("inode ino=%x size=%lld mode=%x db=%x\n", ino, inodes[ino].size, inodes[ino].mode, inodes[ino].db[z]);
-    uint64_t pos = (uint64_t)header->blocksz * (uint64_t)inodes[ino].db[z];
+  uint32_t *dataBlocks;
+  uint32_t dbSize;
 
-    while ( pos < header->blocksz * (inodes[ino].db[z] + 1))
+  if (inodes[ino].db[1] == 0xFFFFFFFF)
+  {
+    dbSize = inodes[ino].blocks;
+    dataBlocks = malloc(sizeof(uint32_t) * dbSize);
+    for (int i = 0; i < dbSize; i++)
+      dataBlocks[i] = i + inodes[ino].db[0];
+  }
+  else
+  {
+    dbSize = 12;
+    dataBlocks = malloc(sizeof(uint32_t) * dbSize);
+    for (int i = 0; i < dbSize; i++)
+      dataBlocks[i] = inodes[ino].db[i];
+  }
+  for (z = 0; z < dbSize; z++) 
+  {
+    if (dataBlocks[z] == 0) { break; }
+		
+    printfsocket("inode ino=%x size=%lld mode=%x db=%x\n", ino, inodes[ino].size, inodes[ino].mode, dataBlocks[z]);
+    uint64_t pos = (uint64_t)header->blocksz * (uint64_t)dataBlocks[z];
+
+    while ( pos < header->blocksz * (dataBlocks[z] + 1))
     {
       struct dirent_t *ent = malloc(sizeof(struct dirent_t));
       lseek(pfs, pos, SEEK_SET);
@@ -83,8 +97,8 @@ static void parse_directory(int ino, int lev, struct di_d32 *parent, char *paren
       if ((ent->type == 2) && (lev > 0))
       {
         printfsocket("len: %x name: '%.*s' type: %x index:%d\n",ent->namelen,ent->namelen, name, ent->type, ent->ino);
-        printfsocket("Dumping from pos=%x destination=%s\n", inodes[ent->ino].db[z] * header->blocksz, fname);
-        memcpy_to_file(fname, (uint64_t)inodes[ent->ino].db[z] * (uint64_t)header->blocksz, inodes[ent->ino].size);
+        printfsocket("Dumping from pos=%x destination=%s\n", inodes[ent->ino].db[0] * header->blocksz, fname);
+        memcpy_to_file(fname, (uint64_t)inodes[ent->ino].db[0] * (uint64_t)header->blocksz, inodes[ent->ino].size);
       }
       else
       if (ent->type == 3)
@@ -97,21 +111,18 @@ static void parse_directory(int ino, int lev, struct di_d32 *parent, char *paren
       pos += ent->entsize;
     }						
   }
+  free(dataBlocks);
 }
 
 int unpfs(char *pfsfn, char *tidpath)
 {
   uint32_t i;
   uint32_t j;	
-  struct stat st;
 
   mkdir(tidpath, 0777);
 
   pfs = open(pfsfn, O_RDONLY, 0);
   if (pfs < 0) return -1;
-
-  stat(pfsfn, &st);
-  pfs_size = st.st_size;
 
   header = malloc(sizeof(struct pfs_header_t));
   lseek(pfs, 0, SEEK_SET);
