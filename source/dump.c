@@ -236,7 +236,7 @@ static void touch_file(char* destfile)
     if (out) fclose(out);
 }
 
-static void copy_decrypt_dir(char *sourcedir, char* destdir, int dec)
+static void decrypt_dir(char *sourcedir, char* destdir)
 {
     DIR *dir;
     struct dirent *dp;
@@ -263,20 +263,13 @@ static void copy_decrypt_dir(char *sourcedir, char* destdir, int dec)
             {
                 if (S_ISDIR(info.st_mode))
                 {
-                    copy_decrypt_dir(src_path, dst_path, dec);
+                    decrypt_dir(src_path, dst_path);
                 }
                 else
                 if (S_ISREG(info.st_mode))
                 {
-                    if (dec)
-                    {
-                        if (is_self(src_path))
-                            decrypt_and_dump_self(src_path, dst_path);
-                    }
-                    else
-                    {
-                        copy_file(src_path, dst_path);
-                    }
+                    if (is_self(src_path))
+                        decrypt_and_dump_self(src_path, dst_path);
                 }
             }
         }
@@ -316,7 +309,7 @@ int wait_for_game(char *title_id)
     return res;
 }
 
-int wait_for_usb(char *usb_path)
+int wait_for_usb(char *usb_name, char *usb_path)
 {
     FILE *out = fopen("/mnt/usb0/.probe", "wb");
     if (!out)
@@ -328,31 +321,47 @@ int wait_for_usb(char *usb_path)
         }
         else
         {
-            sprintf(usb_path, "/mnt/usb1");
+            unlink("/mnt/usb1/.probe");
+            sprintf(usb_name, "%s", "USB1");
+            sprintf(usb_path, "%s", "/mnt/usb1");
         }
     }
     else
     {
-        sprintf(usb_path, "/mnt/usb0");
+        unlink("/mnt/usb0/.probe");
+        sprintf(usb_name, "%s", "USB0");
+        sprintf(usb_path, "%s", "/mnt/usb0");
     }
     fclose(out);
 
     return 1;
 }
 
+int file_exists(char *fname)
+{
+    FILE *file = fopen(fname, "rb");
+    if (file)
+    {
+        fclose(file);
+        return 1;
+    }
+    return 0;
+}
+
 void dump_game(char *title_id, char *usb_path)
 {
-    char base_path[PATH_MAX];
-    char src_path[PATH_MAX];
-    char dst_path[PATH_MAX];
-    char dump_sem[PATH_MAX];
-    char comp_sem[PATH_MAX];
+    char base_path[64];
+    char src_path[64];
+    char dst_file[64];
+    char dst_app[64];
+    char dst_pat[64];
+    char dump_sem[64];
+    char comp_sem[64];
 
-    sprintf(src_path, "%s/.probe", usb_path);
-    unlink(src_path);
+    sprintf(src_path, "%s/.split", usb_path);
+    int split = file_exists(src_path);
 
     sprintf(base_path, "%s/%s", usb_path, title_id);
-    mkdir(base_path, 0777);
 
     sprintf(dump_sem, "%s.dumping", base_path);
     sprintf(comp_sem, "%s.complete", base_path);
@@ -360,27 +369,70 @@ void dump_game(char *title_id, char *usb_path)
     unlink(comp_sem);
     touch_file(dump_sem);
 
+    if (split)
+    {
+        sprintf(dst_app, "%s-app", base_path);
+        sprintf(dst_pat, "%s-patch", base_path);
+    }
+    else
+    {
+        sprintf(dst_app, "%s", base_path);
+        sprintf(dst_pat, "%s", base_path);
+    }
+
+    mkdir(dst_app, 0777);
+    mkdir(dst_pat, 0777);
+
     sprintf(src_path, "/user/app/%s/app.pkg", title_id);
-    unpkg(src_path, base_path);
+    notify("Extracting app package...");
+    unpkg(src_path, dst_app);
+    sprintf(src_path, "/system_data/priv/appmeta/%s/nptitle.dat", title_id);
+    sprintf(dst_file, "%s/sce_sys/nptitle.dat", dst_app);
+    copy_file(src_path, dst_file);
+    sprintf(src_path, "/system_data/priv/appmeta/%s/npbind.dat", title_id);
+    sprintf(dst_file, "%s/sce_sys/npbind.dat", dst_app);
+    copy_file(src_path, dst_file);
 
     sprintf(src_path, "/user/patch/%s/patch.pkg", title_id);
-    unpkg(src_path, base_path);
-
+    if (file_exists(src_path))
+    {
+        if (split)
+            notify("Extracting patch package...");
+        else
+            notify("Merging patch package...");
+        unpkg(src_path, dst_pat);
+        sprintf(src_path, "/system_data/priv/appmeta/%s/nptitle.dat", title_id);
+        sprintf(dst_file, "%s/sce_sys/nptitle.dat", dst_pat);
+        copy_file(src_path, dst_file);
+        sprintf(src_path, "/system_data/priv/appmeta/%s/npbind.dat", title_id);
+        sprintf(dst_file, "%s/sce_sys/npbind.dat", dst_pat);
+        copy_file(src_path, dst_file);
+    }
+    
     sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0-nest/pfs_image.dat", title_id);
-    unpfs(src_path, base_path);
+    notify("Extracting app image...");
+    unpfs(src_path, dst_app);
 
     sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0-nest/pfs_image.dat", title_id);
-    unpfs(src_path, base_path);
+    if (file_exists(src_path))
+    {
+        if (split)
+            notify("Extracting patch image...");
+        else
+            notify("Applying patch...");
+        unpfs(src_path, dst_pat);
+    }
 
     sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0", title_id);
-    copy_decrypt_dir(src_path, base_path, 1);
+    notify("Decrypting selfs...");
+    decrypt_dir(src_path, dst_app);
 
     sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0", title_id);
-    copy_decrypt_dir(src_path, base_path, 1);
-
-    sprintf(src_path, "/system_data/priv/appmeta/%s", title_id);
-    sprintf(dst_path, "%s/sce_sys", base_path);
-    copy_decrypt_dir(src_path, dst_path, 0);
+    if (file_exists(src_path))
+    {
+        notify("Decrypting patch...");
+        decrypt_dir(src_path, dst_pat);
+    }
 
     unlink(dump_sem);
     touch_file(comp_sem);

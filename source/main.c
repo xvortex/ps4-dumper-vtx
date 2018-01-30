@@ -142,8 +142,10 @@ int kpayload(struct thread *td){
 
 int _main(struct thread *td)
 {
-	char title_id[PATH_MAX];
-	char usb_path[PATH_MAX];
+	char title_id[64];
+	char usb_name[64];
+	char usb_path[64];
+	char msg[64];
 
 	// Init and resolve libraries
 	initKernel();
@@ -158,15 +160,38 @@ int _main(struct thread *td)
 	// patch some things in the kernel (sandbox, prison, debug settings etc..)
 	syscall(11,kpayload,td);
 
-	while (!wait_for_game(title_id)) {
-		sceKernelUsleep(5 * 1000);
+	initSysUtil();
+
+	notify("Welcome to PS4-DUMPER v"VERSION);
+	sceKernelSleep(5);
+
+	if (!wait_for_game(title_id))
+	{
+		notify("Waiting for game to launch...");
+		sceKernelSleep(1);
+		while (!wait_for_game(title_id)) {
+			sceKernelSleep(1);
+		}
 	}
 
-	while (!wait_for_usb(usb_path)) {
-		sceKernelUsleep(5 * 1000);
+	if (!wait_for_usb(usb_name, usb_path))
+	{
+		notify("Waiting for USB disk...");
+		sceKernelSleep(1);
+		while (!wait_for_usb(usb_name, usb_path)) {
+			sceKernelSleep(1);
+		}
 	}
+
+	sprintf(msg, "Start dumping\n%s to %s", title_id, usb_name);
+	notify(msg);
+	sceKernelSleep(5);
 
 	dump_game(title_id, usb_path);
+
+	sprintf(msg, "%s dumped.\nShutting down...", title_id);
+	notify(msg);
+	sceKernelSleep(10);
 
 	printfsocket("Bye!");
 

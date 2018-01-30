@@ -1,6 +1,10 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
+#define PRIx64 "llx"
+#define PRIu64 "llu"
+#define PRId64 "lld"
+
 int sock;
 
 void initDebugSocket(void);
@@ -16,5 +20,7 @@ do {\
 #else
 #define printfsocket(format, ...) (void)0
 #endif
+
+void notify(char *message);
 
 #endif
