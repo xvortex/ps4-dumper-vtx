@@ -6,6 +6,7 @@
 #define PRId64 "lld"
 
 int sock;
+char notify_buf[512];
 
 void initDebugSocket(void);
 void closeDebugSocket(void);

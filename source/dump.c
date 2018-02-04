@@ -309,6 +309,21 @@ int wait_for_game(char *title_id)
     return res;
 }
 
+int wait_for_bdcopy(char *title_id)
+{
+    char path[256];
+    char buf[1];
+
+    sprintf(path, "/system_data/playgo/%s/bdcopy.pbm", title_id);
+    FILE *pbm = fopen(path, "rb");
+    if (!pbm) return 1;
+    fseek(pbm, -1, SEEK_END);
+    fread(buf, sizeof(char), 1, pbm);
+    fclose(pbm);
+
+    return (buf [0]);
+}
+
 int wait_for_usb(char *usb_name, char *usb_path)
 {
     FILE *out = fopen("/mnt/usb0/.probe", "wb");

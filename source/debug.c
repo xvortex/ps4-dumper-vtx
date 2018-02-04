@@ -1,9 +1,8 @@
 #include "ps4.h"
 #include "defines.h"
+#include "debug.h"
 
 #ifdef DEBUG_SOCKET
-
-int sock;
 
 void initDebugSocket(void)
 {

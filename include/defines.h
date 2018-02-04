@@ -1,7 +1,7 @@
 #ifndef __DEFINES
 #define __DEFINES
 
-#define VERSION "1.3"
+#define VERSION "1.4"
 
 //#define DEBUG_SOCKET
 

@@ -10,6 +10,7 @@
 #include "unpfs.h"
 
 int pfs;
+size_t pfs_size, pfs_copied;
 struct pfs_header_t *header;
 struct di_d32 *inodes;
 
@@ -33,6 +34,8 @@ void memcpy_to_file(const char *fname, uint64_t ptr, uint64_t size)
          fwrite(buffer, 1, bytes, fp);
          size -= bytes;
          ix++;
+         pfs_copied += bytes;
+         sprintf(notify_buf, "%u%% completed...", pfs_copied * 100 / pfs_size);
       }
       fclose(fp);
     }
@@ -107,6 +110,9 @@ int unpfs(char *pfsfn, char *tidpath)
   pfs = open(pfsfn, O_RDONLY, 0);
   if (pfs < 0) return -1;
 
+  pfs_size = lseek(pfs, (size_t)0, SEEK_END);
+  pfs_copied = 0;
+
   header = malloc(sizeof(struct pfs_header_t));
   lseek(pfs, 0, SEEK_SET);
   read(pfs, header, sizeof(struct pfs_header_t));
@@ -129,6 +135,8 @@ int unpfs(char *pfsfn, char *tidpath)
   }
 
   parse_directory(header->superroot_ino, 0, tidpath);
+
+  notify_buf[0] = '\0';
 
   free(inodes);
 

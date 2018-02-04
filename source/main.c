@@ -3,6 +3,8 @@
 #include "debug.h"
 #include "dump.h"
 
+int nthread_run;
+
 unsigned int long long __readmsr(unsigned long __register) {
 	unsigned long __edx;
 	unsigned long __eax;
@@ -140,6 +142,28 @@ int kpayload(struct thread *td){
 	return 0;
 }
 
+void *nthread_func(void *arg)
+{
+        time_t t1, t2;
+        t1 = 0;
+	while (nthread_run)
+	{
+		if (notify_buf[0])
+		{
+			t2 = time(NULL);
+			if ((t2 - t1) >= 60)
+			{
+				t1 = t2;
+				notify(notify_buf);
+			}
+		}
+		else t1 = 0;
+		sceKernelSleep(1);
+	}
+
+	return NULL;
+}
+
 int _main(struct thread *td)
 {
 	char title_id[64];
@@ -162,25 +186,42 @@ int _main(struct thread *td)
 
 	initSysUtil();
 
+	nthread_run = 1;
+	notify_buf[0] = '\0';
+	ScePthread nthread;
+	scePthreadCreate(&nthread, NULL, nthread_func, NULL, "nthread");
+
 	notify("Welcome to PS4-DUMPER v"VERSION);
 	sceKernelSleep(5);
 
 	if (!wait_for_game(title_id))
 	{
-		notify("Waiting for game to launch...");
+		sprintf(notify_buf, "Waiting for game to launch...");
 		sceKernelSleep(1);
 		while (!wait_for_game(title_id)) {
 			sceKernelSleep(1);
 		}
+		notify_buf[0] = '\0';
+	}
+
+	if (!wait_for_bdcopy(title_id))
+	{
+		sprintf(notify_buf, "Waiting for game to copy...");
+		sceKernelSleep(1);
+		while (!wait_for_bdcopy(title_id)) {
+			sceKernelSleep(1);
+		}
+		notify_buf[0] = '\0';
 	}
 
 	if (!wait_for_usb(usb_name, usb_path))
 	{
-		notify("Waiting for USB disk...");
+		sprintf(notify_buf, "Waiting for USB disk...");
 		sceKernelSleep(1);
 		while (!wait_for_usb(usb_name, usb_path)) {
 			sceKernelSleep(1);
 		}
+		notify_buf[0] = '\0';
 	}
 
 	sprintf(msg, "Start dumping\n%s to %s", title_id, usb_name);
@@ -192,6 +233,8 @@ int _main(struct thread *td)
 	sprintf(msg, "%s dumped.\nShutting down...", title_id);
 	notify(msg);
 	sceKernelSleep(10);
+
+	nthread_run = 0;
 
 	printfsocket("Bye!");
 
