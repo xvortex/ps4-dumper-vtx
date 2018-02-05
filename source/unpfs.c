@@ -14,36 +14,38 @@ size_t pfs_size, pfs_copied;
 struct pfs_header_t *header;
 struct di_d32 *inodes;
 
-#define BUFFER_SIZE 65536
+#define BUFFER_SIZE 0x100000
+
+char *copy_buffer;
 
 void memcpy_to_file(const char *fname, uint64_t ptr, uint64_t size)
 {
   size_t bytes;
   size_t ix = 0;
-  char *buffer = malloc(BUFFER_SIZE);
-  if (buffer != NULL)
+  FILE *fp = fopen(fname, "wb");
+  if (fp)
   {
-    FILE *fp = fopen(fname, "wb");
-    if (fp)
+    while (size > 0)
     {
-      while (size > 0)
-      {
-         bytes = (size > BUFFER_SIZE) ? BUFFER_SIZE : size;
-         lseek(pfs, ptr + ix * BUFFER_SIZE, SEEK_SET);
-         read(pfs, buffer, bytes);
-         fwrite(buffer, 1, bytes, fp);
-         size -= bytes;
-         ix++;
-         pfs_copied += bytes;
-         sprintf(notify_buf, "%u%% completed...", pfs_copied * 100 / pfs_size);
-      }
-      fclose(fp);
+      bytes = (size > BUFFER_SIZE) ? BUFFER_SIZE : size;
+      lseek(pfs, ptr + ix * BUFFER_SIZE, SEEK_SET);
+      read(pfs, copy_buffer, bytes);
+      fwrite(copy_buffer, 1, bytes, fp);
+      size -= bytes;
+      ix++;
+      pfs_copied += bytes;
+      if (pfs_copied > pfs_size) pfs_copied = pfs_size;
+      sprintf(notify_buf, "%u%% completed...", pfs_copied * 100 / pfs_size);
     }
-    free(buffer);
+    fclose(fp);
+  }
+  else
+  {
+    sprintf(notify_buf, "Error: cannot copy file %s!", fname);
   }
 }
 
-static void parse_directory(int ino, int lev, char *parent_name)
+static void parse_directory(int ino, int lev, char *parent_name, bool dry_run)
 {
   for (uint32_t z = 0; z < inodes[ino].blocks; z++) 
   {
@@ -84,14 +86,17 @@ static void parse_directory(int ino, int lev, char *parent_name)
         printfsocket(">file pos=0x%"PRIx64" size=%"PRId64" dest=%s\n",
                (uint64_t)header->blocksz * inodes[ent->ino].db[0],
                inodes[ent->ino].size, fname);
-        memcpy_to_file(fname, (uint64_t)header->blocksz * inodes[ent->ino].db[0], inodes[ent->ino].size);
+        if (dry_run)
+          pfs_size += inodes[ent->ino].size;
+        else
+          memcpy_to_file(fname, (uint64_t)header->blocksz * inodes[ent->ino].db[0], inodes[ent->ino].size);
       }
       else
       if (ent->type == 3)
       {
         printfsocket(">scan dir %s\n", name);
         mkdir(fname, 0777);
-        parse_directory(ent->ino, lev + 1, fname);
+        parse_directory(ent->ino, lev + 1, fname, dry_run);
       }
 
       pos += ent->entsize;
@@ -105,13 +110,12 @@ static void parse_directory(int ino, int lev, char *parent_name)
 
 int unpfs(char *pfsfn, char *tidpath)
 {
+  copy_buffer = malloc(BUFFER_SIZE);
+
   mkdir(tidpath, 0777);
 
   pfs = open(pfsfn, O_RDONLY, 0);
   if (pfs < 0) return -1;
-
-  pfs_size = lseek(pfs, (size_t)0, SEEK_END);
-  pfs_copied = 0;
 
   header = malloc(sizeof(struct pfs_header_t));
   lseek(pfs, 0, SEEK_SET);
@@ -134,13 +138,20 @@ int unpfs(char *pfsfn, char *tidpath)
     }
   }
 
-  parse_directory(header->superroot_ino, 0, tidpath);
+  pfs_size = 0;
+  pfs_copied = 0;
+
+  parse_directory(header->superroot_ino, 0, tidpath, 1);
+
+  parse_directory(header->superroot_ino, 0, tidpath, 0);
 
   notify_buf[0] = '\0';
 
   free(inodes);
 
   close(pfs);
+
+  free(copy_buffer);
 	
   return 0;
 }

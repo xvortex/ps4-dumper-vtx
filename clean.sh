@@ -6,4 +6,4 @@ popd
 
 make clean
 
-rm -f ps4-dumper.bin
+rm -f *.bin

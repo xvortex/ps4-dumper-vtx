@@ -72,18 +72,32 @@ int is_self(const char *fn)
     return res;
 }
 
-int read_decrypt_segment(int fd, uint64_t index, uint64_t offset, size_t size, uint8_t *out) {
+#define DECRYPT_SIZE 0x100000
+
+bool read_decrypt_segment(int fd, uint64_t index, uint64_t offset, size_t size, uint8_t *out)
+{
+    uint8_t *outPtr = out;
+    uint64_t outSize = size;
     uint64_t realOffset = (index << 32) | offset;
-    uint8_t *addr = (uint8_t*)mmap(0, size, PROT_READ, MAP_PRIVATE | 0x80000, fd, realOffset);
-    if (addr != MAP_FAILED) {
-        memcpy(out, addr, size);
-        munmap(addr, size);
-        return TRUE;
+    while (outSize > 0)
+    {
+        size_t bytes = (outSize > DECRYPT_SIZE) ? DECRYPT_SIZE : outSize;
+        uint8_t *addr = (uint8_t*)mmap(0, bytes, PROT_READ, MAP_PRIVATE | 0x80000, fd, realOffset);
+        if (addr != MAP_FAILED)
+        {
+            memcpy(outPtr, addr, bytes);
+            munmap(addr, bytes);
+        }
+        else
+        {
+            printfsocket("mmap segment [%d] err(%d) : %s\n", index, errno, strerror(errno));
+            return FALSE;
+        }
+        outPtr += bytes;
+        outSize -= bytes;
+        realOffset += bytes;
     }
-    else {
-        printfsocket("mmap segment [%d] err(%d) : %s\n", index, errno, strerror(errno));
-        return FALSE;
-    }
+    return TRUE;
 }
 
 int is_segment_in_other_segment(Elf64_Phdr *phdr, int index, Elf64_Phdr *phdrs, int num) {
@@ -101,7 +115,6 @@ int is_segment_in_other_segment(Elf64_Phdr *phdr, int index, Elf64_Phdr *phdrs, 
     }
     return FALSE;
 }
-
 
 SegmentBufInfo *parse_phdr(Elf64_Phdr *phdrs, int num, int *segBufNum) {
     printfsocket("segment num : %d\n", num);
