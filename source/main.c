@@ -1,9 +1,12 @@
 #include "ps4.h"
 #include "defines.h"
+#include "main.h"
 #include "debug.h"
 #include "dump.h"
+#include "cfg.h"
 
 int nthread_run;
+configuration config;
 
 unsigned int long long __readmsr(unsigned long __register) {
 	unsigned long __edx;
@@ -74,6 +77,7 @@ struct thread {
     	void *useless;
     	struct proc *td_proc;
 };
+
 
 int kpayload(struct thread *td){
 
@@ -151,7 +155,7 @@ void *nthread_func(void *arg)
 		if (notify_buf[0])
 		{
 			t2 = time(NULL);
-			if ((t2 - t1) >= 60)
+			if ((t2 - t1) >= config.notify)
 			{
 				t1 = t2;
 				notify(notify_buf);
@@ -164,12 +168,32 @@ void *nthread_func(void *arg)
 	return NULL;
 }
 
+static int config_handler(void* user, const char* name, const char* value)
+{
+    configuration* pconfig = (configuration*)user;
+
+    #define MATCH(n) strcmp(name, n) == 0
+    if (MATCH("split")) {
+        pconfig->split = atoi(value);
+    } else
+    if (MATCH("notify")) {
+        pconfig->notify = atoi(value);
+    } else
+    if (MATCH("shutdown")) {
+        pconfig->shutdown = atoi(value);
+    };
+
+    return 1;
+}
+
 int _main(struct thread *td)
 {
 	char title_id[64];
 	char usb_name[64];
 	char usb_path[64];
+	char cfg_path[64];
 	char msg[64];
+	int progress;
 
 	// Init and resolve libraries
 	initKernel();
@@ -186,6 +210,10 @@ int _main(struct thread *td)
 
 	initSysUtil();
 
+	config.split    = 0;
+	config.notify   = 60;
+	config.shutdown = 1;
+
 	nthread_run = 1;
 	notify_buf[0] = '\0';
 	ScePthread nthread;
@@ -194,33 +222,37 @@ int _main(struct thread *td)
 	notify("Welcome to PS4-DUMPER v"VERSION);
 	sceKernelSleep(5);
 
-	if (!wait_for_game(title_id))
-	{
-		sprintf(notify_buf, "Waiting for game to launch...");
-		sceKernelSleep(1);
-		while (!wait_for_game(title_id)) {
-			sceKernelSleep(1);
-		}
-		notify_buf[0] = '\0';
-	}
-
-	if (!wait_for_bdcopy(title_id))
-	{
-		sprintf(notify_buf, "Waiting for game to copy...");
-		sceKernelSleep(1);
-		while (!wait_for_bdcopy(title_id)) {
-			sceKernelSleep(1);
-		}
-		notify_buf[0] = '\0';
-	}
-
 	if (!wait_for_usb(usb_name, usb_path))
 	{
 		sprintf(notify_buf, "Waiting for USB disk...");
-		sceKernelSleep(1);
-		while (!wait_for_usb(usb_name, usb_path)) {
+		do {
 			sceKernelSleep(1);
 		}
+		while (!wait_for_usb(usb_name, usb_path));
+		notify_buf[0] = '\0';
+	}
+
+	sprintf(cfg_path, "%s/dumper.cfg", usb_path);
+	cfg_parse(cfg_path, config_handler, &config);
+
+	if (!wait_for_game(title_id))
+	{
+		sprintf(notify_buf, "Waiting for game to launch...");
+		do {
+			sceKernelSleep(1);
+		}
+		while (!wait_for_game(title_id));
+		notify_buf[0] = '\0';
+	}
+
+	if (wait_for_bdcopy(title_id) < 100)
+	{
+		do {
+			sceKernelSleep(1);
+			progress = wait_for_bdcopy(title_id);
+			sprintf(notify_buf, "Waiting for game to copy\n%u%% completed...", progress);
+		}
+		while (progress < 100);
 		notify_buf[0] = '\0';
 	}
 
@@ -230,7 +262,10 @@ int _main(struct thread *td)
 
 	dump_game(title_id, usb_path);
 
-	sprintf(msg, "%s dumped.\nShutting down...", title_id);
+	if (config.shutdown)
+		sprintf(msg, "%s dumped.\nShutting down...", title_id);
+	else
+		sprintf(msg, "%s dumped.\nBye!", title_id);
 	notify(msg);
 	sceKernelSleep(10);
 
@@ -243,10 +278,13 @@ int _main(struct thread *td)
 #endif
 
 	// Reboot PS4
-	int evf = syscall(540, "SceSysCoreReboot");
-	syscall(546, evf, 0x4000, 0);
-	syscall(541, evf);
-        syscall(37, 1, 30);
+	if (config.shutdown)
+	{
+		int evf = syscall(540, "SceSysCoreReboot");
+		syscall(546, evf, 0x4000, 0);
+		syscall(541, evf);
+	        syscall(37, 1, 30);
+	}
 	
 	return 0;
 }

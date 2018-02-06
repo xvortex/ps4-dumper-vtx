@@ -7,6 +7,8 @@
 #include "debug.h"
 #include "unpkg.h"
 
+#define EOF '\00'
+
 // Helper functions.
 static inline uint16_t bswap_16(uint16_t val)
 {
@@ -22,12 +24,12 @@ static inline uint32_t bswap_32(uint32_t val)
     | ((val & (uint32_t)0xff000000UL) >> 24);
 }
 
-int fgetc(FILE *fp)
+static inline int fgetc(FILE *fp)
 {
   char c;
 
   if (fread(&c, 1, 1, fp) == 0)
-    return ('\00');
+    return (EOF);
   return (c);
 }
 
@@ -37,7 +39,7 @@ char *read_string(FILE* f)
   int c;
   int length = 0;
   if (!string) return string;
-  while((c = fgetc(f)) != '\00')
+  while((c = fgetc(f)) != EOF)
   {
     string[length++] = c;
   }

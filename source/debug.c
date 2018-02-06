@@ -1,6 +1,7 @@
 #include "ps4.h"
 #include "defines.h"
 #include "debug.h"
+#include "main.h"
 
 #ifdef DEBUG_SOCKET
 
@@ -29,6 +30,7 @@ void closeDebugSocket(void)
 
 void notify(char *message)
 {
+	if (!config.notify) return;
 	char buffer[512];
 	sprintf(buffer, "%s\n\n\n\n\n\n\n", message);
 	sceSysUtilSendSystemNotificationWithText(0x81, buffer);

@@ -142,15 +142,13 @@ int unpfs(char *pfsfn, char *tidpath)
   pfs_copied = 0;
 
   parse_directory(header->superroot_ino, 0, tidpath, 1);
-
   parse_directory(header->superroot_ino, 0, tidpath, 0);
 
   notify_buf[0] = '\0';
 
+  free(header);
   free(inodes);
-
   close(pfs);
-
   free(copy_buffer);
 	
   return 0;

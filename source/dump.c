@@ -2,6 +2,7 @@
 #include "defines.h"
 #include "debug.h"
 #include "dump.h"
+#include "main.h"
 #include "elf64.h"
 #include "unpfs.h"
 #include "unpkg.h"
@@ -325,16 +326,31 @@ int wait_for_game(char *title_id)
 int wait_for_bdcopy(char *title_id)
 {
     char path[256];
-    char buf[1];
+    char *buf;
+    size_t filelen, progress;
 
     sprintf(path, "/system_data/playgo/%s/bdcopy.pbm", title_id);
     FILE *pbm = fopen(path, "rb");
-    if (!pbm) return 1;
-    fseek(pbm, -1, SEEK_END);
-    fread(buf, sizeof(char), 1, pbm);
+    if (!pbm) return 100;
+
+    fseek(pbm, 0, SEEK_END);
+    filelen = ftell(pbm);
+    fseek(pbm, 0, SEEK_SET);
+
+    buf = malloc(filelen);
+
+    fread(buf, sizeof(char), filelen, pbm);
     fclose(pbm);
 
-    return (buf [0]);
+    progress = 0;
+    for (int i = 0x100; i < filelen; i++)
+    {
+        if (buf [i]) progress++;
+    }
+
+    free(buf);
+
+    return (progress * 100 / (filelen - 0x100));
 }
 
 int wait_for_usb(char *usb_name, char *usb_path)
@@ -386,9 +402,6 @@ void dump_game(char *title_id, char *usb_path)
     char dump_sem[64];
     char comp_sem[64];
 
-    sprintf(src_path, "%s/.split", usb_path);
-    int split = file_exists(src_path);
-
     sprintf(base_path, "%s/%s", usb_path, title_id);
 
     sprintf(dump_sem, "%s.dumping", base_path);
@@ -397,69 +410,89 @@ void dump_game(char *title_id, char *usb_path)
     unlink(comp_sem);
     touch_file(dump_sem);
 
-    if (split)
+    if (config.split)
     {
         sprintf(dst_app, "%s-app", base_path);
         sprintf(dst_pat, "%s-patch", base_path);
+        if (config.split & SPLIT_APP)
+            mkdir(dst_app, 0777);
+        if (config.split & SPLIT_PATCH)
+            mkdir(dst_pat, 0777);
     }
     else
     {
         sprintf(dst_app, "%s", base_path);
         sprintf(dst_pat, "%s", base_path);
+        mkdir(base_path, 0777);
     }
 
-    mkdir(dst_app, 0777);
-    mkdir(dst_pat, 0777);
-
-    sprintf(src_path, "/user/app/%s/app.pkg", title_id);
-    notify("Extracting app package...");
-    unpkg(src_path, dst_app);
-    sprintf(src_path, "/system_data/priv/appmeta/%s/nptitle.dat", title_id);
-    sprintf(dst_file, "%s/sce_sys/nptitle.dat", dst_app);
-    copy_file(src_path, dst_file);
-    sprintf(src_path, "/system_data/priv/appmeta/%s/npbind.dat", title_id);
-    sprintf(dst_file, "%s/sce_sys/npbind.dat", dst_app);
-    copy_file(src_path, dst_file);
-
-    sprintf(src_path, "/user/patch/%s/patch.pkg", title_id);
-    if (file_exists(src_path))
+    if ((!config.split) || (config.split & SPLIT_APP))
     {
-        if (split)
-            notify("Extracting patch package...");
-        else
-            notify("Merging patch package...");
-        unpkg(src_path, dst_pat);
+        sprintf(src_path, "/user/app/%s/app.pkg", title_id);
+        notify("Extracting app package...");
+        unpkg(src_path, dst_app);
         sprintf(src_path, "/system_data/priv/appmeta/%s/nptitle.dat", title_id);
-        sprintf(dst_file, "%s/sce_sys/nptitle.dat", dst_pat);
+        sprintf(dst_file, "%s/sce_sys/nptitle.dat", dst_app);
         copy_file(src_path, dst_file);
         sprintf(src_path, "/system_data/priv/appmeta/%s/npbind.dat", title_id);
-        sprintf(dst_file, "%s/sce_sys/npbind.dat", dst_pat);
+        sprintf(dst_file, "%s/sce_sys/npbind.dat", dst_app);
         copy_file(src_path, dst_file);
     }
-    
-    sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0-nest/pfs_image.dat", title_id);
-    notify("Extracting app image...");
-    unpfs(src_path, dst_app);
 
-    sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0-nest/pfs_image.dat", title_id);
-    if (file_exists(src_path))
+    if ((!config.split) || (config.split & SPLIT_PATCH))
     {
-        if (split)
-            notify("Extracting patch image...");
-        else
-            notify("Applying patch...");
-        unpfs(src_path, dst_pat);
+        sprintf(src_path, "/user/patch/%s/patch.pkg", title_id);
+        if (file_exists(src_path))
+        {
+            if (config.split)
+                notify("Extracting patch package...");
+            else
+                notify("Merging patch package...");
+            unpkg(src_path, dst_pat);
+            sprintf(src_path, "/system_data/priv/appmeta/%s/nptitle.dat", title_id);
+            sprintf(dst_file, "%s/sce_sys/nptitle.dat", dst_pat);
+            copy_file(src_path, dst_file);
+            sprintf(src_path, "/system_data/priv/appmeta/%s/npbind.dat", title_id);
+            sprintf(dst_file, "%s/sce_sys/npbind.dat", dst_pat);
+            copy_file(src_path, dst_file);
+        }
     }
 
-    sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0", title_id);
-    notify("Decrypting selfs...");
-    decrypt_dir(src_path, dst_app);
-
-    sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0", title_id);
-    if (file_exists(src_path))
+    if ((!config.split) || (config.split & SPLIT_APP))
     {
-        notify("Decrypting patch...");
-        decrypt_dir(src_path, dst_pat);
+        sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0-nest/pfs_image.dat", title_id);
+        notify("Extracting app image...");
+        unpfs(src_path, dst_app);
+    }
+
+    if ((!config.split) || (config.split & SPLIT_PATCH))
+    {
+        sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0-nest/pfs_image.dat", title_id);
+        if (file_exists(src_path))
+        {
+            if (config.split)
+                notify("Extracting patch image...");
+            else
+                notify("Applying patch...");
+            unpfs(src_path, dst_pat);
+        }
+    }
+
+    if ((!config.split) || (config.split & SPLIT_APP))
+    {
+        sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0", title_id);
+        notify("Decrypting selfs...");
+        decrypt_dir(src_path, dst_app);
+    }
+
+    if ((!config.split) || (config.split & SPLIT_PATCH))
+    {
+        sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0", title_id);
+        if (file_exists(src_path))
+        {
+            notify("Decrypting patch...");
+            decrypt_dir(src_path, dst_pat);
+        }
     }
 
     unlink(dump_sem);
