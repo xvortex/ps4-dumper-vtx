@@ -5,6 +5,8 @@
 
 #ifdef DEBUG_SOCKET
 
+int sock;
+
 void initDebugSocket(void)
 {
 	struct sockaddr_in server;

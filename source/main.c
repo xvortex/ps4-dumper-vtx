@@ -78,6 +78,9 @@ struct thread {
     	struct proc *td_proc;
 };
 
+#define	KERN_XFAST_SYSCALL	0x3095D0	// 4.55
+#define KERN_PRISON_0		0x10399B0
+#define KERN_ROOTVNODE		0x21AFA30
 
 int kpayload(struct thread *td){
 
@@ -87,10 +90,10 @@ int kpayload(struct thread *td){
 	fd = td->td_proc->p_fd;
 	cred = td->td_proc->p_ucred;
 
-	void* kernel_base = &((uint8_t*)__readmsr(0xC0000082))[-0x30EB30];
+	void* kernel_base = &((uint8_t*)__readmsr(0xC0000082))[-KERN_XFAST_SYSCALL];
 	uint8_t* kernel_ptr = (uint8_t*)kernel_base;
-	void** got_prison0 =   (void**)&kernel_ptr[0xF26010];
-	void** got_rootvnode = (void**)&kernel_ptr[0x206D250];
+	void** got_prison0 =   (void**)&kernel_ptr[KERN_PRISON_0];
+	void** got_rootvnode = (void**)&kernel_ptr[KERN_ROOTVNODE];
 
 	cred->cr_uid = 0;
 	cred->cr_ruid = 0;
@@ -119,26 +122,21 @@ int kpayload(struct thread *td){
 	uint64_t cr0 = readCr0();
 	writeCr0(cr0 & ~X86_CR0_WP);
 
-	// specters debug settings patchs
-	*(char *)(kernel_base + 0x2001516) |= 0x14;
-	*(char *)(kernel_base + 0x2001539) |= 3;
-	*(char *)(kernel_base + 0x200153A) |= 1;
-	*(char *)(kernel_base + 0x2001558) |= 1;	
+	// debug settings patchs
+	*(char *)(kernel_base + 0x1B6D086) |= 0x14;
+	*(char *)(kernel_base + 0x1B6D0A9) |= 3;
+	*(char *)(kernel_base + 0x1B6D0AA) |= 1;
+	*(char *)(kernel_base + 0x1B6D0C8) |= 1;	
 
-	// debug menu full patches thanks to sealab
-	*(uint32_t *)(kernel_base + 0x4CECB7) = 0;
-	*(uint32_t *)(kernel_base + 0x4CFB9B) = 0;
+	// debug menu full patches
+	*(uint32_t *)(kernel_base + 0x4D70F7) = 0;
+	*(uint32_t *)(kernel_base + 0x4D7F81) = 0;
 
-	// Target ID Patches :)
-	*(uint16_t *)(kernel_base + 0x1FE59E4) = 0x8101;
-	*(uint16_t *)(kernel_base + 0X1FE5A2C) = 0x8101;
-	*(uint16_t *)(kernel_base + 0x200151C) = 0x8101;
-
-	// enable mmap of all SELF ???
-	*(uint8_t*)(kernel_base + 0x31EE40) = 0x90;
-	*(uint8_t*)(kernel_base + 0x31EE41) = 0xE9;
-	*(uint8_t*)(kernel_base + 0x31EF98) = 0x90;
-	*(uint8_t*)(kernel_base + 0x31EF99) = 0x90;
+	// enable mmap of all SELF
+	*(uint8_t*)(kernel_base + 0x143BF2) = 0x90;
+	*(uint8_t*)(kernel_base + 0x143BF3) = 0xE9;
+	*(uint8_t*)(kernel_base + 0x143E0E) = 0x90;
+	*(uint8_t*)(kernel_base + 0x143E0F) = 0x90;
 
 	// Restore write protection
 	writeCr0(cr0);
@@ -210,7 +208,7 @@ int _main(struct thread *td)
 
 	initSysUtil();
 
-	config.split    = 0;
+	config.split    = 3;
 	config.notify   = 60;
 	config.shutdown = 1;
 
