@@ -26,7 +26,7 @@ static inline int fgetc(FILE *fp)
 
 static char *fgets(char *dst, int max, FILE *fp)
 {
-    int c;
+    int c = EOF;
     char *p;
 
     /* get max bytes or upto a newline */
