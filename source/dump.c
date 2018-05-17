@@ -146,11 +146,11 @@ SegmentBufInfo *parse_phdr(Elf64_Phdr *phdrs, int num, int *segBufNum) {
 }
 
 void do_dump(char *saveFile, int fd, SegmentBufInfo *segBufs, int segBufNum, Elf64_Ehdr *ehdr) {
-    FILE *sf = fopen(saveFile, "wb");
-    if (sf != NULL) {
+    int sf = open(saveFile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (sf != -1) {
         size_t elfsz = 0x40 + ehdr->e_phnum * sizeof(Elf64_Phdr);
         printfsocket("elf header + phdr size : 0x%08X\n", elfsz);
-        fwrite(ehdr, elfsz, 1, sf);
+        write(sf, ehdr, elfsz);
 
         for (int i = 0; i < segBufNum; i += 1) {
             printfsocket("sbuf index : %d, offset : 0x%016x, bufsz : 0x%016x, filesz : 0x%016x, enc : %d\n", segBufs[i].index, segBufs[i].fileoff, segBufs[i].bufsz, segBufs[i].filesz, segBufs[i].enc);
@@ -159,23 +159,23 @@ void do_dump(char *saveFile, int fd, SegmentBufInfo *segBufs, int segBufNum, Elf
             if (segBufs[i].enc)
             {
                 if (read_decrypt_segment(fd, segBufs[i].index, 0, segBufs[i].filesz, buf)) {
-                    fseek(sf, segBufs[i].fileoff, SEEK_SET);
-                    fwrite(buf, segBufs[i].bufsz, 1, sf);
+                    lseek(sf, segBufs[i].fileoff, SEEK_SET);
+                    write(sf, buf, segBufs[i].bufsz);
                 }
             }
             else
             {
                 lseek(fd, -segBufs[i].filesz, SEEK_END);
                 read(fd, buf, segBufs[i].filesz);
-                fseek(sf, segBufs[i].fileoff, SEEK_SET);
-                fwrite(buf, segBufs[i].filesz, 1, sf);
+                lseek(sf, segBufs[i].fileoff, SEEK_SET);
+                write(sf, buf, segBufs[i].filesz);
             }
             free(buf);
         }
-        fclose(sf);
+        close(sf);
     }
     else {
-        printfsocket("fopen %s err : %s\n", saveFile, strerror(errno));
+        printfsocket("open %s err : %s\n", saveFile, strerror(errno));
     }
 }
 
@@ -218,26 +218,26 @@ void decrypt_and_dump_self(char *selfFile, char *saveFile) {
 
 static void copy_file(char *sourcefile, char* destfile)
 {
-    FILE *src = fopen(sourcefile, "rb");
-    if (src)
+    int fdin = open(sourcefile, O_RDONLY, 0);
+    if (fdin != -1)
     {
-        FILE *out = fopen(destfile,"wb");
-        if (out)
+        int fdout = open(destfile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (fdout != -1)
         {
             size_t bytes;
             char *buffer = malloc(BUFFER_SIZE);
             if (buffer != NULL)
             {
-                while (0 < (bytes = fread(buffer, 1, BUFFER_SIZE, src)))
-                    fwrite(buffer, 1, bytes, out);
+                while (0 < (bytes = read(fdin, buffer, BUFFER_SIZE)))
+                    write(fdout, buffer, bytes);
                     free(buffer);
             }
-            fclose(out);
+            close(fdout);
         }
         else {
             printfsocket("write %s err : %s\n", destfile, strerror(errno));
         }
-        fclose(src);
+        close(fdin);
     }
     else {
         printfsocket("open %s err : %s\n", sourcefile, strerror(errno));
@@ -246,8 +246,8 @@ static void copy_file(char *sourcefile, char* destfile)
 
 static void touch_file(char* destfile)
 {
-    FILE *out = fopen(destfile, "wb");
-    if (out) fclose(out);
+    int fd = open(destfile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (fd != -1) close(fd);
 }
 
 static void decrypt_dir(char *sourcedir, char* destdir)
@@ -355,30 +355,16 @@ int wait_for_bdcopy(char *title_id)
 
 int wait_for_usb(char *usb_name, char *usb_path)
 {
-    FILE *out = fopen("/mnt/usb0/.probe", "wb");
-    if (!out)
+    int fd = open("/mnt/usb0/.probe", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (fd != -1)
     {
-        out = fopen("/mnt/usb1/.probe", "wb");
-        if (!out)
-        {
-            return 0;
-        }
-        else
-        {
-            unlink("/mnt/usb1/.probe");
-            sprintf(usb_name, "%s", "USB1");
-            sprintf(usb_path, "%s", "/mnt/usb1");
-        }
-    }
-    else
-    {
+        close(fd);
         unlink("/mnt/usb0/.probe");
         sprintf(usb_name, "%s", "USB0");
         sprintf(usb_path, "%s", "/mnt/usb0");
+        return 1;
     }
-    fclose(out);
-
-    return 1;
+    return 0;
 }
 
 int file_exists(char *fname)
