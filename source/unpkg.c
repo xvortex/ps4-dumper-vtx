@@ -24,22 +24,22 @@ static inline uint32_t bswap_32(uint32_t val)
     | ((val & (uint32_t)0xff000000UL) >> 24);
 }
 
-static inline int fgetc(FILE *fp)
+static inline int fgetc(int fd)
 {
   char c;
 
-  if (fread(&c, 1, 1, fp) == 0)
+  if (read(fd, &c, 1) < 1)
     return (EOF);
   return (c);
 }
 
-char *read_string(FILE* f)
+char *read_string(int fd)
 {
   char *string = malloc(sizeof(char) * 256);
   int c;
   int length = 0;
   if (!string) return string;
-  while((c = fgetc(f)) != EOF)
+  while((c = fgetc(fd)) != EOF)
   {
     string[length++] = c;
   }
@@ -65,48 +65,14 @@ static void _mkdir(const char *dir)
   }
 }
 
-typedef struct
-{
-  uint32_t type;
-  char *name;
-} pkg_entry_value;
+#define caseentry(id, name) {\
+  case id:\
+    entry_name = name;\
+    break;\
+}
 
 char *get_entry_name_by_type(uint32_t type)
 {
-  static const pkg_entry_value entries [] = {
-	{ 0x0400, "license.dat" },
-	{ 0x0401, "license.info" },
-	{ 0x0402, "nptitle.dat" },
-	{ 0x0403, "npbind.dat" },
-	{ 0x0404, "selfinfo.dat" },
-	{ 0x0406, "imageinfo.dat" },
-	{ 0x0407, "target-deltainfo.dat" },
-	{ 0x0408, "origin-deltainfo.dat" },
-	{ 0x0409, "psreserved.dat" },
-	{ 0x1000, "param.sfo" },
-	{ 0x1001, "playgo-chunk.dat" },
-	{ 0x1002, "playgo-chunk.sha" },
-	{ 0x1003, "playgo-manifest.xml" },
-	{ 0x1004, "pronunciation.xml" },
-	{ 0x1005, "pronunciation.sig" },
-	{ 0x1006, "pic1.png" },
-	{ 0x1007, "pubtoolinfo.dat" },
-	{ 0x1008, "app/playgo-chunk.dat" },
-	{ 0x1009, "app/playgo-chunk.sha" },
-	{ 0x100A, "app/playgo-manifest.xml" },
-	{ 0x100B, "shareparam.json" },
-	{ 0x100C, "shareoverlayimage.png" },
-	{ 0x100D, "save_data.png" },
-	{ 0x100E, "shareprivacyguardimage.png" },
-	{ 0x1200, "icon0.png" },
-	{ 0x1220, "pic0.png" },
-	{ 0x1240, "snd0.at9" },
-	{ 0x1260, "changeinfo/changeinfo.xml" },
-	{ 0x1280, "icon0.dds" },
-	{ 0x12A0, "pic0.dds" },
-	{ 0x12C0, "pic1.dds" },
-  };
-
   char *entry_name = malloc(32);
 
   if ((type >= 0x1201) && (type <= 0x121F))
@@ -136,13 +102,38 @@ char *get_entry_name_by_type(uint32_t type)
   {
     free(entry_name);
     entry_name = NULL;
-    for (int i = 0; i < sizeof entries / sizeof entries[0]; i++)
-    {
-      if (type == entries[i].type)
-      {
-        entry_name = entries[i].name;
-        break;
-      }
+    switch (type) {
+      caseentry(0x0400, "license.dat");
+      caseentry(0x0401, "license.info");
+      caseentry(0x0402, "nptitle.dat");
+      caseentry(0x0403, "npbind.dat");
+      caseentry(0x0404, "selfinfo.dat");
+      caseentry(0x0406, "imageinfo.dat");
+      caseentry(0x0407, "target-deltainfo.dat");
+      caseentry(0x0408, "origin-deltainfo.dat");
+      caseentry(0x0409, "psreserved.dat");
+      caseentry(0x1000, "param.sfo");
+      caseentry(0x1001, "playgo-chunk.dat");
+      caseentry(0x1002, "playgo-chunk.sha");
+      caseentry(0x1003, "playgo-manifest.xml");
+      caseentry(0x1004, "pronunciation.xml");
+      caseentry(0x1005, "pronunciation.sig");
+      caseentry(0x1006, "pic1.png");
+      caseentry(0x1007, "pubtoolinfo.dat");
+      caseentry(0x1008, "app/playgo-chunk.dat");
+      caseentry(0x1009, "app/playgo-chunk.sha");
+      caseentry(0x100A, "app/playgo-manifest.xml");
+      caseentry(0x100B, "shareparam.json");
+      caseentry(0x100C, "shareoverlayimage.png");
+      caseentry(0x100D, "save_data.png");
+      caseentry(0x100E, "shareprivacyguardimage.png");
+      caseentry(0x1200, "icon0.png");
+      caseentry(0x1220, "pic0.png");
+      caseentry(0x1240, "snd0.at9");
+      caseentry(0x1260, "changeinfo/changeinfo.xml");
+      caseentry(0x1280, "icon0.dds");
+      caseentry(0x12A0, "pic0.dds");
+      caseentry(0x12C0, "pic1.dds");
     }
   }
 
@@ -151,22 +142,21 @@ char *get_entry_name_by_type(uint32_t type)
 
 int unpkg(char *pkgfn, char *tidpath)
 {
-  FILE *in = NULL;
-  FILE *out = NULL;
   struct cnt_pkg_main_header m_header;
   struct cnt_pkg_content_header c_header;
   memset(&m_header, 0, sizeof(struct cnt_pkg_main_header));
   memset(&c_header, 0, sizeof(struct cnt_pkg_content_header));
 
-  if ((in = fopen(pkgfn, "rb")) == NULL)
+  int fdin = open(pkgfn, O_RDONLY, 0);
+  if (fdin == -1)
   {
     printfsocket("File not found!\n");
     return 1;
   }
 
   // Read in the main CNT header (size seems to be 0x180 with 4 hashes included).
-  fseek(in, 0, SEEK_SET);
-  fread(&m_header, 1,  0x180, in);
+  lseek(fdin, 0, SEEK_SET);
+  read(fdin, &m_header, 0x180);
 
   if (m_header.magic != PS4_PKG_MAGIC)
   {
@@ -183,8 +173,8 @@ int unpkg(char *pkgfn, char *tidpath)
   printfsocket("\n");
 
   // Seek to offset 0x400 and read content associated header (size seems to be 0x80 with 2 hashes included).
-  fseek(in, 0x400, SEEK_SET);
-  fread(&c_header, 1,  0x80, in);
+  lseek(fdin, 0x400, SEEK_SET);
+  read(fdin, &c_header, 0x80);
 
   printfsocket("PS4 PKG content header:\n");
   printfsocket("- PKG content offset: 0x%X\n", bswap_32(c_header.content_offset));
@@ -192,7 +182,7 @@ int unpkg(char *pkgfn, char *tidpath)
   printfsocket("\n");
 
   // Locate the entry table and list each type of section inside the PKG/CNT file.
-  fseek(in, bswap_32(m_header.file_table_offset), SEEK_SET);
+  lseek(fdin, bswap_32(m_header.file_table_offset), SEEK_SET);
 
   printfsocket("PS4 PKG table entries:\n");
   struct cnt_pkg_table_entry *entries = malloc(sizeof(struct cnt_pkg_table_entry) * bswap_16(m_header.table_entries_num));
@@ -200,7 +190,7 @@ int unpkg(char *pkgfn, char *tidpath)
   int i;
   for (i = 0; i < bswap_16(m_header.table_entries_num); i++)
   {
-    fread(&entries[i], 1,  0x20, in);
+    read(fdin, &entries[i], 0x20);
     printfsocket("Entry #%d\n", i);
     printfsocket("- PKG table entry type: 0x%X\n", bswap_32(entries[i].type));
     printfsocket("- PKG table entry offset: 0x%X\n", bswap_32(entries[i].offset));
@@ -225,8 +215,8 @@ int unpkg(char *pkgfn, char *tidpath)
     if (bswap_32(entries[i].type) == PS4_PKG_ENTRY_TYPE_NAME_TABLE)
     {
       printfsocket("Found name table entry. Extracting file names:\n");
-      fseek(in, bswap_32(entries[i].offset) + 1, SEEK_SET);
-      while ((file_name_list[file_name_index] = read_string(in))[0] != '\0')
+      lseek(fdin, bswap_32(entries[i].offset) + 1, SEEK_SET);
+      while ((file_name_list[file_name_index] = read_string(fdin))[0] != '\0')
       {
         printfsocket("%s\n", file_name_list[file_name_index]);
         file_name_index++;
@@ -275,8 +265,8 @@ int unpkg(char *pkgfn, char *tidpath)
   {
     entry_file_data = (unsigned char *)realloc(NULL, entry_files[i].size);
 
-    fseek(in, entry_files[i].offset, SEEK_SET);
-    fread(entry_file_data, 1,  entry_files[i].size, in);
+    lseek(fdin, entry_files[i].offset, SEEK_SET);
+    read(fdin, entry_file_data, entry_files[i].size);
 
     if (entry_files[i].name == NULL) continue;
 
@@ -285,19 +275,21 @@ int unpkg(char *pkgfn, char *tidpath)
 
     _mkdir (dest_path);
 
-    if ((out = fopen(dest_path, "wb")) == NULL )
+    int fdout = open(dest_path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (fdout != -1)
+    {
+      write(fdout, entry_file_data, entry_files[i].size);
+      close(fdout);
+    }
+    else
     {
       printfsocket("Can't open file for writing!\n");
       return 3;
     }
-
-    fwrite(entry_file_data, 1, entry_files[i].size, out);
-
-    fclose(out);
   }
 
   // Clean up.
-  fclose(in);
+  close(fdin);
 
   free(entries);
   free(entry_files);

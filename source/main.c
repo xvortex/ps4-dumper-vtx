@@ -78,9 +78,9 @@ struct thread {
     	struct proc *td_proc;
 };
 
-#define	KERN_XFAST_SYSCALL	0x3095D0	// 4.55
-#define KERN_PRISON_0		0x10399B0
-#define KERN_ROOTVNODE		0x21AFA30
+#define	KERN_XFAST_SYSCALL	0x1C0		// 5.05
+#define KERN_PRISON_0		0x10986A0
+#define KERN_ROOTVNODE		0x22C1A70
 
 int kpayload(struct thread *td){
 
@@ -122,21 +122,30 @@ int kpayload(struct thread *td){
 	uint64_t cr0 = readCr0();
 	writeCr0(cr0 & ~X86_CR0_WP);
 
-	// debug settings patchs
-	*(char *)(kernel_base + 0x1B6D086) |= 0x14;
-	*(char *)(kernel_base + 0x1B6D0A9) |= 3;
-	*(char *)(kernel_base + 0x1B6D0AA) |= 1;
-	*(char *)(kernel_base + 0x1B6D0C8) |= 1;	
+	// debug settings patches 5.05
+	*(char *)(kernel_base + 0x1CD0686) |= 0x14;
+	*(char *)(kernel_base + 0x1CD06A9) |= 3;
+	*(char *)(kernel_base + 0x1CD06AA) |= 1;
+	*(char *)(kernel_base + 0x1CD06C8) |= 1;
 
-	// debug menu full patches
-	*(uint32_t *)(kernel_base + 0x4D70F7) = 0;
-	*(uint32_t *)(kernel_base + 0x4D7F81) = 0;
+	// debug menu error patches 5.05
+	*(uint32_t *)(kernel_base + 0x4F9048) = 0;
+	*(uint32_t *)(kernel_base + 0x4FA15C) = 0;
 
-	// enable mmap of all SELF
-	*(uint8_t*)(kernel_base + 0x143BF2) = 0x90;
-	*(uint8_t*)(kernel_base + 0x143BF3) = 0xE9;
-	*(uint8_t*)(kernel_base + 0x143E0E) = 0x90;
-	*(uint8_t*)(kernel_base + 0x143E0F) = 0x90;
+	// enable mmap of all SELF 5.05
+	*(uint8_t*)(kernel_base + 0x117B0) = 0xB0;
+	*(uint8_t*)(kernel_base + 0x117B1) = 0x01;
+	*(uint8_t*)(kernel_base + 0x117B2) = 0xC3;
+
+	*(uint8_t*)(kernel_base + 0x117C0) = 0xB0;
+	*(uint8_t*)(kernel_base + 0x117C1) = 0x01;
+	*(uint8_t*)(kernel_base + 0x117C2) = 0xC3;
+
+	*(uint8_t*)(kernel_base + 0x13F03F) = 0x31;
+	*(uint8_t*)(kernel_base + 0x13F040) = 0xC0;
+	*(uint8_t*)(kernel_base + 0x13F041) = 0x90;
+	*(uint8_t*)(kernel_base + 0x13F042) = 0x90;
+	*(uint8_t*)(kernel_base + 0x13F043) = 0x90;
 
 	// Restore write protection
 	writeCr0(cr0);

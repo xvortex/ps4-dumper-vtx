@@ -22,22 +22,22 @@ void memcpy_to_file(const char *fname, uint64_t ptr, uint64_t size)
 {
   size_t bytes;
   size_t ix = 0;
-  FILE *fp = fopen(fname, "wb");
-  if (fp)
+  int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+  if (fd != -1)
   {
     while (size > 0)
     {
       bytes = (size > BUFFER_SIZE) ? BUFFER_SIZE : size;
       lseek(pfs, ptr + ix * BUFFER_SIZE, SEEK_SET);
       read(pfs, copy_buffer, bytes);
-      fwrite(copy_buffer, 1, bytes, fp);
+      write(fd, copy_buffer, bytes);
       size -= bytes;
       ix++;
       pfs_copied += bytes;
       if (pfs_copied > pfs_size) pfs_copied = pfs_size;
       sprintf(notify_buf, "%u%% completed...", pfs_copied * 100 / pfs_size);
     }
-    fclose(fp);
+    close(fd);
   }
   else
   {

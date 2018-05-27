@@ -16,3 +16,9 @@ Brief instructions:
    (You can get the orbis-pub-gen tool via PKG_Fake_Generator);
 9) Run PS4HEN payload, install and test your .pkg;
 10) Enjoy.
+
+## Credits
+
+- [Flatz](https://twitter.com/flat_z)
+- [Joon](https://twitter.com/joonie86)
+- Hykem

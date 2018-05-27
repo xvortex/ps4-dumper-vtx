@@ -6,4 +6,4 @@ popd
 
 make clean
 
-rm -f *.bin
+rm -f ps4-dumper-vtx.bin payload.js
